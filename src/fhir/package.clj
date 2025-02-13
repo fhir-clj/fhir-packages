@@ -2,14 +2,14 @@
   (:require
    [cheshire.core]
    [clojure.string :as str]
-   [clojure.java.io :as io]
-   [clojure.java.shell :refer [sh]])
+   [clojure.java.io :as io])
   (:import
    [java.net URL]
-   [java.io File FileOutputStream InputStream BufferedOutputStream]
+   [java.io InputStream]
    [org.apache.commons.compress.archivers.tar TarArchiveEntry TarArchiveInputStream]
    [org.apache.commons.compress.compressors.gzip GzipCompressorInputStream]))
 
+(set! *warn-on-reflection* true)
 
 (def SIMPLIFIER_REPO "https://packages.simplifier.net")
 (def HL7_REPO "https://packages2.fhir.org/packages")
@@ -71,8 +71,18 @@
   [pkg-info on-file & [acc]]
   (reduce-tar pkg-info (fn [acc nm read-resource] (on-file acc nm read-resource)) acc))
 
+(defn package-json [pkg-info]
+  (reduce-package
+   pkg-info
+   (fn [acc file-name read-fn]
+     (if (= file-name "package.json")
+       (read-fn true)
+       acc))))
 
-(comment
-
-
-  )
+(defn index-json [pkg-info]
+  (reduce-package
+   pkg-info
+   (fn [acc file-name read-fn]
+     (if (= file-name ".index.json")
+       (read-fn true)
+       acc))))

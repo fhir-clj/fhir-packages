@@ -66,5 +66,15 @@
      "CapabilityStatement-terminology-server.json"
      "CodeSystem-FHIR-version.json"])
 
+  (matcho/match
+      (subj/package-json bulp-pkg)
+    {:url "https://profiles.ihe.net/ITI/BALP/1.1.3",
+     :version "1.1.3",
+     :dependencies
+     {:hl7.fhir.r4.core "4.0.1",
+      :hl7.terminology.r4 "5.3.0",
+      :hl7.fhir.uv.extensions.r4 "1.0.0"}})
+
+  (subj/index-json bulp-pkg)
 
   )
