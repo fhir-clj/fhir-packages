@@ -1,6 +1,7 @@
 (ns fhir.package-test
   (:require [fhir.package :as subj]
             [matcho.core :as matcho]
+            [clojure.string :as str]
             [clojure.test :as t]))
 
 (t/deftest test-fhir-packages
@@ -76,5 +77,16 @@
       :hl7.fhir.uv.extensions.r4 "1.0.0"}})
 
   (subj/index-json bulp-pkg)
+
+  (def r4-idx
+    (subj/reduce-package r4-pkg (fn [acc file-name read-fn]
+                                  (if (str/ends-with? file-name ".json")
+                                    (let [res (read-fn true)]
+                                      (if (and (:resourceType res) (:url res))
+                                        (assoc-in acc [(:resourceType res) (:url res) (:version res)] res)
+                                        acc))
+                                    acc))))
+
+  (keys (get bulp-idx "ValueSet"))
 
   )
