@@ -13,8 +13,9 @@
 
 (def SIMPLIFIER_REPO "https://packages.simplifier.net")
 (def HL7_REPO "https://packages2.fhir.org/packages")
+(def GET_IG_REPO "https://get-ig.org")
 
-(defn get-registry [] SIMPLIFIER_REPO)
+(defn get-registry [] GET_IG_REPO)
 
 (defn get-tarball-url [pkg-info]
   (or (get-in pkg-info [:dist :tarball])
@@ -57,14 +58,28 @@
             (recur (cb acc nm read-fn)))
           acc)))))
 
+(defn try-resolve-tag [package-info version-or-tag]
+  (get-in package-info [:dist-tags (keyword version-or-tag)]))
+
 (defn pkg-info
   "get package information pkg could be just name a.b.c or versioned name a.b.c@1.0.0"
   [pkg & [registry]]
-  (let [[pkg version] (str/split pkg #"@" 2)]
-    (-> (slurp (URL. (str (or registry (get-registry)) "/" pkg)))
-        (cheshire.core/parse-string keyword)
-        (cond-> version
-          (get-in [:versions (keyword version)])))))
+  (let [[pkg version-or-tag] (str/split pkg #"@" 2)
+        package-info (-> (slurp (-> (str (or registry (get-registry)) "/" pkg)
+                                    (URL.)
+                                    (.openConnection)
+                                    (doto (.setRequestProperty "Accept" "application/json"))
+                                    (.getInputStream)))
+                         (cheshire.core/parse-string keyword))
+        version (or (try-resolve-tag package-info version-or-tag)
+                    version-or-tag)]
+
+    (when (nil? version)
+      (throw (ex-info (format "Can't find specified version %s for package %s"
+                              version-or-tag
+                              pkg) {})))
+
+    (get-in package-info [:versions (keyword version)])))
 
 (defn reduce-package
   "(fn on-file [acc file-name read-resource-fn])"
