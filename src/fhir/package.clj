@@ -65,6 +65,7 @@
   "get package information pkg could be just name a.b.c or versioned name a.b.c@1.0.0"
   [pkg & [registry]]
   (let [[pkg version-or-tag] (str/split pkg #"@" 2)
+        version-or-tag (or version-or-tag "latest")
         package-info (-> (slurp (-> (str (or registry (get-registry)) "/" pkg)
                                     (URL.)
                                     (.openConnection)
