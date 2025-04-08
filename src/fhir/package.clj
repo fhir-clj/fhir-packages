@@ -2,7 +2,8 @@
   (:require
    [cheshire.core]
    [clojure.string :as str]
-   [clojure.java.io :as io])
+   [clojure.java.io :as io]
+   [clojure.test :as t])
   (:import
    [java.net URL]
    [java.io InputStream]
@@ -60,6 +61,58 @@
 
 (defn try-resolve-tag [package-info version-or-tag]
   (get-in package-info [:dist-tags (keyword version-or-tag)]))
+
+#_(t/with-test
+  (defn extract-package-version-manifest [manifest version-str]
+    )
+  (let [tpkg {:dist-tags {:latest "8.0.0-ballot"},
+              :versions {:0.0.0 {:version "0.0.0"},
+                         :1.0.0 {:version "1.0.0"},
+                         :1.0.1 {:version "1.0.1"},
+                         :1.1.0 {:version "1.1.0"},
+                         :2.0.0 {:version "2.0.0"},
+                         :2.1.0 {:version "2.1.0"},
+                         :3.0.0 {:version "3.0.0"},
+                         :3.0.1 {:version "3.0.1"},
+                         :3.1.0 {:version "3.1.0"},
+                         :3.1.1 {:version "3.1.1"}
+                         :3.2.0 {:version "3.2.0"},
+                         :4.0.0 {:version "4.0.0"},
+                         :4.1.0 {:version "4.1.0"},
+                         :5.0.0 {:version "5.0.0"},
+                         :5.0.1 {:version "5.0.1"},
+                         :6.0.0 {:version "6.0.0"},
+                         :6.0.0-ballot {:version "6.0.0-ballot"},
+                         :6.1.0 {:version "6.1.0"},
+                         :6.1.0-snapshot1 {:version "6.1.0-snapshot1"},
+                         :7.0.0 {:version "7.0.0"},
+                         :7.0.0-ballot {:version "7.0.0-ballot"},
+                         :8.0.0-ballot {:version "8.0.0-ballot"}}
+              :version "8.0.0-ballot"}]
+    (t/is (= ;; use dist-tags
+           {:version "8.0.0-ballot"}
+           (extract-package-version-manifest tpkg "latest")
+           ))
+
+    (t/is (= ;; because no release
+           {:version "8.0.0-ballot"}
+           (extract-package-version-manifest tpkg "8.0.x")))
+
+    (t/is (= ;; because it's the last release
+           {:version "7.0.0"}
+           (extract-package-version-manifest tpkg "7.0.x")))
+
+    (t/is (= {:version "3.0.1"}
+             (extract-package-version-manifest tpkg "3.0.x")))
+
+    (t/is (= {:version "3.2.0"}
+             (extract-package-version-manifest tpkg "3.x")))
+
+    (t/is (= {:version "8.0.0-ballot"}
+             (extract-package-version-manifest tpkg "x")))
+
+    )
+  )
 
 (defn pkg-info
   "get package information pkg could be just name a.b.c or versioned name a.b.c@1.0.0"
