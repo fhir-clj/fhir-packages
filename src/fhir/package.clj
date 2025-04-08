@@ -62,9 +62,105 @@
 (defn try-resolve-tag [package-info version-or-tag]
   (get-in package-info [:dist-tags (keyword version-or-tag)]))
 
-#_(t/with-test
+(defn normalize-part [s]
+  (cond
+    (nil? s) nil
+    (#{"*" "x"} s) :x
+    :else (Integer/parseInt s)))
+
+(t/with-test
+  (defn parse-version [version-str]
+    (when-let [[_ major minor patch pre]
+               (re-matches #"(?i)^(\d+|x|\*)(?:\.(\d+|x|\*))?(?:\.(\d+|x|\*))?(?:-([a-z0-9.-]+))?$"
+                           version-str)]
+      {:major (normalize-part major)
+       :minor (normalize-part minor)
+       :patch (normalize-part patch)
+       :pre-release pre}))
+
+  (t/testing "parse-version with normalization"
+    (t/is (= (parse-version "0.1.x")
+             {:major 0, :minor 1, :patch :x, :pre-release nil}))
+    (t/is (= (parse-version "0.1.1")
+             {:major 0, :minor 1, :patch 1, :pre-release nil}))
+    (t/is (= (parse-version "0.1.*")
+             {:major 0, :minor 1, :patch :x, :pre-release nil}))
+    (t/is (= (parse-version "x")
+             {:major :x, :minor nil, :patch nil, :pre-release nil}))
+    (t/is (= (parse-version "*")
+             {:major :x, :minor nil, :patch nil, :pre-release nil}))
+    (t/is (= (parse-version "1.*")
+             {:major 1, :minor :x, :patch nil, :pre-release nil}))
+    (t/is (= (parse-version "0.1.1-snap")
+             {:major 0, :minor 1, :patch 1, :pre-release "snap"}))
+    (t/is (= (parse-version "1.0")
+             {:major 1, :minor 0, :patch nil, :pre-release nil}))))
+
+
+(t/with-test
+  (defn matches-target? [target version]
+    (assert (:major target) "Target should specify major")
+    (when (and  (:minor target) (not= (:minor target) :x))
+      (assert (:minor target) "Target should specify minor") )
+    (when (and  (:minor target) (not= (:minor target) :x))
+      (assert (:patch target) "Target should specify patch when minor specified"))
+    (if (= (:major target) :x)
+      true
+      (and (= (:major target)
+              (:major version))
+           (if (= (:minor target) :x)
+             true
+             (and (= (:minor target)
+                     (:minor version))
+                  (if (= (:patch target) :x)
+                    true
+                    (and (= (:patch target)
+                            (:patch version))
+                         (if-not (:pre-release target)
+                           true
+                           (= (:pre-release target)
+                              (:pre-release version))))))))))
+
+  (t/is (matches-target? (parse-version "1.x") (parse-version "1.0.0")))
+
+  (t/is (matches-target? (parse-version "*") (parse-version "1.0.0")))
+
+  (t/is (matches-target? (parse-version "1.x.x") (parse-version "1.0.0")))
+
+  (t/is (thrown? Throwable
+         (matches-target? (parse-version "1.0") (parse-version "1.0.0"))))
+
+  (t/is (thrown? Throwable
+         (matches-target? (parse-version "1") (parse-version "1.0.0") )))
+
+  (t/is (matches-target? (parse-version "1.0.0") (parse-version "1.0.0")))
+
+  (t/is (matches-target? (parse-version "8.x") (parse-version "8.0.0-ballot")))
+  (t/is (matches-target? (parse-version "8.0.0-ballot") (parse-version "8.0.0-ballot")))
+  (t/is (not (matches-target? (parse-version "7.x") (parse-version "8.0.0-ballot")))))
+
+
+(defn sort-filter-versions [versions target-pattern]
+  (let [parsed-targer (parse-version target-pattern)]
+    (->> versions
+         (sort-by (fn [[k v]] ((juxt :major :minor :patch #(if (:pre-release %)
+                                                             -1
+                                                             0))
+                               (parse-version (name k)))))
+         reverse
+         (filter (fn [[k v]]
+                   (let [parsed-v (parse-version (name k))]
+                     (matches-target? parsed-targer parsed-v))))
+         first
+         second)))
+
+
+(t/with-test
   (defn extract-package-version-manifest [manifest version-str]
-    )
+    (if-let [tag-v (get (:dist-tags manifest) (keyword version-str)) ]
+      (get (:versions manifest) (keyword tag-v))
+      (sort-filter-versions (:versions manifest) version-str)))
+
   (let [tpkg {:dist-tags {:latest "8.0.0-ballot"},
               :versions {:0.0.0 {:version "0.0.0"},
                          :1.0.0 {:version "1.0.0"},
@@ -89,10 +185,10 @@
                          :7.0.0-ballot {:version "7.0.0-ballot"},
                          :8.0.0-ballot {:version "8.0.0-ballot"}}
               :version "8.0.0-ballot"}]
+
     (t/is (= ;; use dist-tags
            {:version "8.0.0-ballot"}
-           (extract-package-version-manifest tpkg "latest")
-           ))
+           (extract-package-version-manifest tpkg "latest")))
 
     (t/is (= ;; because no release
            {:version "8.0.0-ballot"}
@@ -111,29 +207,36 @@
     (t/is (= {:version "8.0.0-ballot"}
              (extract-package-version-manifest tpkg "x")))
 
-    )
-  )
+    (t/is (= {:version "8.0.0-ballot"}
+             (extract-package-version-manifest tpkg "*")))
+
+    (t/is (= {:version "8.0.0-ballot"}
+             (extract-package-version-manifest tpkg "latest")))
+
+    (t/is (= nil
+             (extract-package-version-manifest tpkg "9.x")))
+
+    (t/is (thrown? Throwable
+                   (extract-package-version-manifest tpkg "unknown")))))
 
 (defn pkg-info
   "get package information pkg could be just name a.b.c or versioned name a.b.c@1.0.0"
   [pkg & [registry]]
   (let [[pkg version-or-tag] (str/split pkg #"@" 2)
-        version-or-tag (or version-or-tag "latest")
+        version-or-latest (or version-or-tag "latest")
         package-info (-> (slurp (-> (str (or registry (get-registry)) "/" pkg)
                                     (URL.)
                                     (.openConnection)
                                     (doto (.setRequestProperty "Accept" "application/json"))
                                     (.getInputStream)))
                          (cheshire.core/parse-string keyword))
-        version (or (try-resolve-tag package-info version-or-tag)
-                    version-or-tag)]
 
-    (when (nil? version)
+        info (extract-package-version-manifest package-info version-or-latest)]
+    (when (nil? info)
       (throw (ex-info (format "Can't find specified version %s for package %s"
                               version-or-tag
                               pkg) {})))
-
-    (get-in package-info [:versions (keyword version)])))
+    info))
 
 (defn reduce-package
   "(fn on-file [acc file-name read-resource-fn])"
