@@ -35,7 +35,7 @@
 (defn drop-cache []
   (let [dir (cache-dir)]
     (when (.exists (io/file dir))
-      (doseq [file (.listFiles (io/file dir))]
+      (doseq [^java.io.File file (.listFiles (io/file dir))]
         (.delete file)))
     (.delete (io/file dir))))
 
