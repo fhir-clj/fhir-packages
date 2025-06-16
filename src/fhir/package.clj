@@ -28,10 +28,20 @@
         v (or (:version pkg-info) (get-in pkg-info [:dist-tags :latest]))]
     (str nm "@" v ".tar.gz")))
 
+(defn cache-dir []
+  (let [project-dir (System/getProperty "user.dir")]
+    (str project-dir "/.fhir-packages/")))
+
+(defn drop-cache []
+  (let [dir (cache-dir)]
+    (when (.exists (io/file dir))
+      (doseq [file (.listFiles (io/file dir))]
+        (.delete file)))
+    (.delete (io/file dir))))
+
 (defn load-tarball [pkg-info]
-  (let [project-dir (System/getProperty "user.dir")
-        cache-file-name (get-cache-file-name pkg-info)
-        file-path (str project-dir "/.fhir-packages/" cache-file-name)
+  (let [cache-file-name (get-cache-file-name pkg-info)
+        file-path (str cache-dir cache-file-name)
         file (io/file file-path)
         ^URL url (URL. (get-tarball-url pkg-info))]
     (io/make-parents file-path)
