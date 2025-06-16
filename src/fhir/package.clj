@@ -41,7 +41,7 @@
 
 (defn load-tarball [pkg-info]
   (let [cache-file-name (get-cache-file-name pkg-info)
-        file-path (str cache-dir cache-file-name)
+        file-path (str (cache-dir) cache-file-name)
         file (io/file file-path)
         ^URL url (URL. (get-tarball-url pkg-info))]
     (io/make-parents file-path)
